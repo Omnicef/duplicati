@@ -9,19 +9,14 @@ on: [pull_request, workflow_dispatch]
 jobs:
   build_packages:
     name: Build packages
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-        # Super slow on ubuntu-latest
-        # os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: windows-latest
 
     steps:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.x
+          cache: true
 
       - name: Checkout source
         uses: actions/checkout@v4
@@ -47,24 +42,19 @@ jobs:
 
       - name: Create dummy changelog file
         working-directory: ./ReleaseBuilder
-        run: echo "## Changed" > ./changelog-news.txt
+        shell: pwsh
+        run: Set-Content -Path ./changelog-news.txt -Value "## Changed"
 
       - name: Compile releases
         working-directory: ./ReleaseBuilder
         env:
           UPDATER_KEYFILE: ./testfile.key1
-          WIX:
+          WIX: ${{ env.WIX_BIN }}
         run: dotnet run -- build debug --compile-only=false --git-stash-push=false --disable-docker-push=true --keep-builds=true --disable-authenticode=true --disable-signcode=true --disable-notarize-signing=true --disable-gpg-signing=true --disable-s3-upload=true --disable-github-upload=true --disable-update-server-reload=true --disable-discourse-announce=true --disable-clean-source=true --password=test1234 --version=2.0.0.99
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: duplicati-${{ matrix.os }}
+          name: duplicati-windows
           path: ./ReleaseBuilder/builds/
           retention-days: 5
-  # Disabled, as a new test needs to be written for the new UI
-  # selenium:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Selenium
-  #       run: pipeline/selenium/test.sh
