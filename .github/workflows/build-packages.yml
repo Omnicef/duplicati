@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
+        os: [macos-latest, windows-latest]
         # Super slow on ubuntu-latest
         # os: [ubuntu-latest, windows-latest, macos-latest]
 
