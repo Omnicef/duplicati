@@ -7,17 +7,12 @@ permissions:
 
 on: [pull_request, workflow_dispatch]
 
-
-
 jobs:
   build_packages:
     name: Build packages
     runs-on: windows-latest
 
     steps:
-
-
-
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -26,30 +21,34 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Add WiX v3 to PATH
+      # Find WiX v3 candle.exe and expose both bin and full exe path
+      - name: Detect and add WiX v3 to PATH
         shell: pwsh
         run: |
-          $wixPath = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
-          if (!(Test-Path $wixPath)) {
-            $wixPath = "C:\Program Files (x86)\WiX Toolset v3.14\bin"
+          $candidates = @(
+            "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe",
+            "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe"
+          )
+
+          $wixExe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $wixExe) {
+            throw "WiX candle.exe not found on runner"
           }
-          if (!(Test-Path $wixPath)) {
-            throw "WiX Toolset path not found on runner"
 
+          $wixBin = Split-Path $wixExe -Parent
 
+          # Make the exe and bin path available to later steps
+          "WIX=$wixExe"   | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WIX_BIN=$wixBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          }
-          $wixPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "WIX_BIN=$wixPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-
-
-
+          # Add bin to PATH so light.exe etc. are callable
+          $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify WiX
         shell: pwsh
         run: |
-          candle.exe -?
+          & "${{ env.WIX }}" -?
           light.exe -?
 
       - name: Create dummy changelog file
@@ -61,7 +60,8 @@ jobs:
         working-directory: ./ReleaseBuilder
         env:
           UPDATER_KEYFILE: ./testfile.key1
-          WIX: ${{ env.WIX_BIN }}
+          # IMPORTANT: now points to candle.exe, not the bin folder
+          WIX: ${{ env.WIX }}
         run: dotnet run -- build debug --compile-only=false --git-stash-push=false --disable-docker-push=true --keep-builds=true --disable-authenticode=true --disable-signcode=true --disable-notarize-signing=true --disable-gpg-signing=true --disable-s3-upload=true --disable-github-upload=true --disable-update-server-reload=true --disable-discourse-announce=true --disable-clean-source=true --password=test1234 --version=2.0.0.99
 
       - name: Upload artifacts
